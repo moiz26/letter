@@ -6,23 +6,29 @@ import type { TransportOptions } from 'nodemailer';
 import { insertResponseSchema } from "@shared/schema";
 
 // Create reusable transporter object using GMAIL
-const transportConfig = {
-  service: 'gmail',
-  host: 'smtp.gmail.com',
-  port: 465,
-  secure: true,
-  auth: {
-    user: process.env.EMAIL_USER || 'mrukknown967@gmail.com',
-    pass: process.env.EMAIL_PASS || 'pukl esaa ojkz kngr'
-  },
-  tls: {
-    rejectUnauthorized: false
-  },
-  debug: true,
-  logger: true
+const createTransporter = () => {
+  const transportConfig = {
+    service: 'gmail',
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true,
+    auth: {
+      user: process.env.EMAIL_USER || 'mrukknown967@gmail.com',
+      pass: process.env.EMAIL_PASS || 'pukl esaa ojkz kngr'
+    },
+    tls: {
+      rejectUnauthorized: false
+    }
+  };
+
+  return nodemailer.createTransport(transportConfig);
 };
 
-const transporter = nodemailer.createTransport(transportConfig);
+// Create transporter instance for each request to handle serverless environment
+const getTransporter = () => {
+  const transporter = createTransporter();
+  return transporter;
+};
 
 // Verify transporter configuration immediately
 console.log('Checking email configuration...');
@@ -32,7 +38,7 @@ console.log('Environment variables:', {
   RECEIVER_EMAIL: process.env.RECEIVER_EMAIL || 'Using default'
 });
 
-transporter.verify(function(error, success) {
+getTransporter().verify(function(error, success) {
   if (error) {
     console.error('Email configuration error:', error);
   } else {
@@ -77,13 +83,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Route to submit responses
   app.post('/api/submit-response', async (req, res) => {
     try {
-      // Validate request body
       const validatedData = insertResponseSchema.parse(req.body);
-      
-      // Store response
       const response = await storage.createResponse(validatedData);
       
-      // Send email with the response
+      // Get transporter instance for this request
+      const transporter = getTransporter();
       const receiverEmail = process.env.RECEIVER_EMAIL || process.env.EMAIL_USER;
       
       if (receiverEmail) {
@@ -130,25 +134,12 @@ Received on: ${new Date().toLocaleString()}
         };
         
         try {
-          console.log('Attempting to send email with config:', {
-            from: process.env.EMAIL_USER,
-            to: receiverEmail,
-            emailConfigured: !!process.env.EMAIL_USER && !!process.env.EMAIL_PASS
-          });
-          
           await transporter.sendMail(mailOptions);
           console.log('Email sent successfully');
         } catch (error) {
           console.error('Failed to send email:', error);
-          console.error('Email configuration:', {
-            emailUser: process.env.EMAIL_USER ? 'Configured' : 'Missing',
-            emailPass: process.env.EMAIL_PASS ? 'Configured' : 'Missing',
-            receiverEmail: receiverEmail || 'Missing'
-          });
           // Continue with the response even if email fails
         }
-      } else {
-        console.warn('No receiver email configured');
       }
       
       return res.status(200).json({ success: true, id: response.id });
@@ -191,7 +182,7 @@ Received on: ${new Date().toLocaleString()}
         `
       };
 
-      const info = await transporter.sendMail(mailOptions);
+      const info = await getTransporter().sendMail(mailOptions);
       console.log('Test email sent successfully:', info);
       res.json({ 
         message: 'Test email sent successfully',
@@ -204,7 +195,10 @@ Received on: ${new Date().toLocaleString()}
         message: 'Failed to send test email', 
         error: error instanceof Error ? error.message : 'Unknown error',
         config: {
-          ...transportConfig,
+          service: 'gmail',
+          host: 'smtp.gmail.com',
+          port: 465,
+          secure: true,
           auth: {
             user: process.env.EMAIL_USER ? 'Configured' : 'Missing',
             pass: process.env.EMAIL_PASS ? 'Configured' : 'Missing'

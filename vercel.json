@@ -8,23 +8,30 @@
       "use": "@vercel/node"
     },
     {
-      "src": "client/**",
-      "use": "@vercel/static"
+      "src": "package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "dist"
+      }
     }
   ],
   "routes": [
     {
       "src": "/api/(.*)",
-      "dest": "server/index.ts"
+      "dest": "/server/index.ts"
+    },
+    {
+      "handle": "filesystem"
     },
     {
       "src": "/(.*)",
-      "dest": "client/$1"
+      "dest": "/dist/index.html"
     }
   ],
   "env": {
     "EMAIL_USER": "@email_user",
     "EMAIL_PASS": "@email_pass",
-    "RECEIVER_EMAIL": "@receiver_email"
+    "RECEIVER_EMAIL": "@receiver_email",
+    "NODE_ENV": "production"
   }
 } 
